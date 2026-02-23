@@ -67,47 +67,47 @@ def confidenceRating(client: finnhub.Client, symbol: str = 'AAPL') -> dict:
     ratings = client.recommendation_trends(symbol)
     ratings = pd.DataFrame(ratings)
 
-    if not ratings.empty:
-        ratings = ratings.sort_values(by='period', ascending=False) #sort by most recent
-        latest = ratings.iloc[0] #isolate most recent ratings
-        #print(ratings)
-
-
-        period = latest['period']
-        weighted = {
-            -2: latest['strongSell'],
-            -1: latest['sell'],
-            0: latest['hold'],
-            1: latest['buy'],
-            2: latest['strongBuy']
-        }
-
-        N = sum(weighted.values())
-        if N == 0:
-            raise Exception('No data')
-
-        mean = sum(score * count for score, count in weighted.items()) / N
-        variance = sum(count * (score - mean)**2
-                       for score, count in weighted.items()) / N
-
-        std_dev = sqrt(variance)
-
-
-        confidence = float(round(mean, 2))
-        congruency = round((1 - (std_dev / 2)), 2)
-
-        data = {'Confidence': confidence,
-                'Period' : period[0],
-                'Congruency': congruency,
-                'Symbol': symbol}
-
-
-
-    else:
+    if ratings.empty:
         data = {'Confidence': 0,
                 'Period': 0,
                 'Congruency': 0,
                 'Symbol': symbol}
+        return (data)
+
+
+    ratings = ratings.sort_values(by='period', ascending=False) #sort by most recent
+    latest = ratings.iloc[0] #isolate most recent ratings
+    #print(ratings)
+
+
+    period = latest['period']
+    weighted = {
+        -2: latest['strongSell'],
+        -1: latest['sell'],
+        0: latest['hold'],
+        1: latest['buy'],
+        2: latest['strongBuy']
+    }
+
+    N = sum(weighted.values()) # this is wrong, N should be sum of values * their weights
+    if N == 0:
+        raise Exception('No data')
+
+    mean = sum(score * count for score, count in weighted.items()) / N
+    variance = sum(count * (score - mean)**2
+                   for score, count in weighted.items()) / N
+
+    std_dev = sqrt(variance)
+
+
+    confidence = float(round(mean, 2)) # wrong, need to figure how tf this returns values of >100%
+    congruency = round((1 - (std_dev / 2)), 2)
+
+    data = {'Confidence': confidence,
+            'Period' : period,
+            'Congruency': congruency,
+            'Symbol': symbol}
+
 
     return (data)
 
