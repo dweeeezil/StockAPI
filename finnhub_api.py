@@ -4,13 +4,23 @@ import pandas as pd
 from math import sqrt
 from time import sleep
 
+
+
 def main():
     with open('apiKey.txt', 'r', encoding='UTF-8') as f:
         api_key = f.read()
     finnhub_client = finnhub.Client(api_key = api_key)
 
     #print(getCalendar(client = finnhub_client, outputCSV = True))
-    parseCalendar(finnhub_client, readFromCSV=True, path= 'calendar2026-02-22.csv')
+
+    earningsCalendar = getCalendar(client=finnhub_client,
+                                   exportCSV=True)
+
+    parseCalendar(finnhub_client,
+                  calendar = earningsCalendar,
+                  readFromCSV = False,
+                  exportCSV = True,
+                  logging = True)
 
     #print(confidenceRating(finnhub_client, symbol = 'CANN'))
 
@@ -21,28 +31,56 @@ def main():
     return
 
 
-def parseCalendar(client: finnhub.Client, calendar = None, readFromCSV:bool = False, path:str = '') -> pd.DataFrame:
+def parseCalendar(client: finnhub.Client,
+                  calendar = None,
+                  readFromCSV:bool = False,
+                  ReadPath:str = '',
+                  exportCSV:bool = False,
+                  exportPath:str = f'RatingsCalendar{date.today()}.csv',
+                  logging:bool = True) -> pd.DataFrame:
     if readFromCSV:
-            calendar = pd.read_csv(path)
+            calendar = pd.read_csv(ReadPath)
 
-    for row in calendar.itertuples(index = False):
-        date = row[0]
-        epsActual = row[1]
-        epsEstimate = row[2]
-        hour = row[3]
-        quarter = row[4]
-        revenueActual = row[5]
-        revenueEstimate = row[6]
-        symbol = row[7]
-        year = row[8]
+    calenderLength = len(calendar)
+    exportRows = []
 
+    for CalendarEntry in calendar.itertuples():
+        #date = CalendarEntry[0]
+        #epsActual = CalendarEntry[1]
+        #epsEstimate = CalendarEntry[2]
+        #hour = CalendarEntry[3]
+        #quarter = CalendarEntry[4]
+        #revenueActual = CalendarEntry[5]
+        #revenueEstimate = CalendarEntry[6]
+        #symbol = CalendarEntry[7]
+        #year = CalendarEntry[8]
 
-        print(confidenceRating(client, symbol = symbol))
+        ratings = confidenceRating(client, symbol = CalendarEntry[7])
+
+        currentrow = {
+            'Release Date': CalendarEntry[0],
+            'RevenueActual': CalendarEntry[5],
+            'RevenueEstimate': CalendarEntry[6],
+            'symbol': CalendarEntry[7],
+            'Confidence': ratings['Confidence'],
+            'LastUpdated': ratings['Period'],
+            'Congruency': ratings['Congruency'],
+        }
+        exportRows.append(currentrow)
+
+        if logging:
+            output = f'Generating Ratings, progress: {round(((CalendarEntry.Index / calenderLength) * 100), 1)}%'
+            print(output, end='\r', flush=True)
+
         sleep(1)  # sleep 1s to avoid api call limit
 
+        #------------------------------------ END OF LOOP ---------------
 
 
-    return calendar
+    if exportCSV:
+        pd.DataFrame(exportRows).to_csv(exportPath, index=False)
+
+    return pd.DataFrame(exportRows)
 
 
 
@@ -51,14 +89,16 @@ def getCalendar(client: finnhub.Client,
                 _from:date = date.today(),
                 _to:date = (date.today()) + timedelta(days=7),
                 symbol:str = '',
-                outputCSV: bool = False) -> pd.DataFrame:
+                exportCSV: bool = False) -> pd.DataFrame:
 
 
     calendarRaw = client.earnings_calendar(_from=_from, to=_to, symbol=symbol, international=False)
     calendar = pd.DataFrame(calendarRaw['earningsCalendar'])
 
-    if outputCSV:
+    if exportCSV:
         calendar.to_csv(f'calendar{date.today()}.csv', index=False)
+
+    sleep(2) #api call limit timing
     return calendar
 
 
@@ -104,7 +144,7 @@ def confidenceRating(client: finnhub.Client, symbol: str = 'AAPL') -> dict:
     congruency = round((1 - (std_dev / 2)), 2)
 
     data = {'Confidence': confidence,
-            'Period' : period,
+            'Period' : period,    #how up to date ratings are
             'Congruency': congruency,
             'Symbol': symbol}
 
