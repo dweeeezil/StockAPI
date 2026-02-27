@@ -13,12 +13,11 @@ def main():
 
     #print(getCalendar(client = finnhub_client, outputCSV = True))
 
-    earningsCalendar = getCalendar(client=finnhub_client,
-                                   exportCSV=True)
+    #earningsCalendar = getCalendar(client=finnhub_client,exportCSV=True)
 
     parseCalendar(finnhub_client,
-                  calendar = earningsCalendar,
-                  readFromCSV = False,
+                  readFromCSV = True,
+                  readPath = 'calendar2026-02-22.csv',
                   exportCSV = True,
                   logging = True)
 
@@ -34,12 +33,12 @@ def main():
 def parseCalendar(client: finnhub.Client,
                   calendar = None,
                   readFromCSV:bool = False,
-                  ReadPath:str = '',
+                  readPath:str = '',
                   exportCSV:bool = False,
                   exportPath:str = f'RatingsCalendar{date.today()}.csv',
                   logging:bool = True) -> pd.DataFrame:
     if readFromCSV:
-            calendar = pd.read_csv(ReadPath)
+            calendar = pd.read_csv(readPath)
 
     calenderLength = len(calendar)
     exportRows = []
@@ -122,11 +121,11 @@ def confidenceRating(client: finnhub.Client, symbol: str = 'AAPL') -> dict:
 
     period = latest['period']
     weighted = {
-        -2: latest['strongSell'],
-        -1: latest['sell'],
-        0: latest['hold'],
+        -2: -2 * latest['strongSell'],
+        -1: -1 * latest['sell'],
+        0: 0 * latest['hold'],
         1: latest['buy'],
-        2: latest['strongBuy']
+        2: 2 * latest['strongBuy'] #still not great, need to improve
     }
 
     N = sum(weighted.values()) # this is wrong, N should be sum of values * their weights
