@@ -1,7 +1,7 @@
 
 import finnhub
 import pandas as pd
-import math
+from math import sqrt
 from datetime import date, timedelta
 from time import sleep
 
@@ -58,8 +58,17 @@ def computeConfidenceRating(_apiClient:finnhub.Client = client,
             [100] * mostRecentRatings.get('strongBuy', 0)
     )
 
-    average = round((sum(weighted) / len(weighted)), 2)
-    print(average)
+    if weighted:
+        mean = round((sum(weighted) / len(weighted)), 2)
+        meanSquared = sum(x * x for x in weighted) / len(weighted)
+        variance = meanSquared - mean ** 2
+        std_dev = round(sqrt(variance), 3)
+        max_std = 50
+        congruency = round(max(0, (1 - (std_dev / max_std))), 4) * 100
+    else:
+        mean, congruency = 0, 0
+
+    return mean, congruency
 
 
 
