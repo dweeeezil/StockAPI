@@ -1,9 +1,12 @@
+from sqlite3.dbapi2 import Date
 
 import finnhub
 import pandas as pd
 from math import sqrt
 from datetime import date, timedelta
 from time import sleep
+
+from progressBar import ProgressBar
 
 API_CALL_LIMIT = 1 #API call limit per second (default = 1 for free keys)
 client = None
@@ -17,10 +20,11 @@ def main():
         f.close()
 
 
-    computeConfidenceRating(client, symbol = 'AAPL')
-
-
+    generatePicks(client)
     return
+
+
+
 
 
 
@@ -31,7 +35,9 @@ def getWeeklyEarningsCalendar(_apiClient:finnhub.Client = client,
                               printToCSV:bool = False,
                               CSVoutputPath:str = '') -> pd.DataFrame:
 
-
+    if not _apiClient:
+        global client
+        _apiClient = client
     calendarRaw = _apiClient.earnings_calendar(_from=_start, to=_end, symbol=_symbol, international=False)
     calendar = pd.DataFrame(calendarRaw['earningsCalendar'])
 
@@ -39,14 +45,21 @@ def getWeeklyEarningsCalendar(_apiClient:finnhub.Client = client,
         if CSVoutputPath == '':
             CSVoutputPath = f'EarningsCalendar{_start:%Y%m%d}-{_end:%Y%m%d}.csv'
         calendar.to_csv(CSVoutputPath, index=False)
-
+    sleep(API_CALL_LIMIT)
     return calendar
 
 
 def computeConfidenceRating(_apiClient:finnhub.Client = client,
-                            symbol:str = ''):
+                            symbol:str = '') -> list:
 
-    ratings = pd.DataFrame(client.recommendation_trends(symbol)).sort_values(by=['period'], ascending=False)
+    try:
+        _ratings = (client.recommendation_trends(symbol))
+        ratings = pd.DataFrame(_ratings)
+        ratings.sort_values(by=['period'], ascending=False)
+        print(symbol, ratings)
+    except:
+        print(f'Ratings Period Key Error for {symbol}')
+        return [0, 0, '1970-01-01']
     mostRecentRatings = ratings.iloc[0]
 
     ratingsDate = mostRecentRatings['period']
@@ -68,10 +81,44 @@ def computeConfidenceRating(_apiClient:finnhub.Client = client,
     else:
         mean, congruency = 0, 0
 
-    return mean, congruency
+    return [mean, congruency, ratingsDate]
 
 
+def generatePicks(_apiClient: finnhub.Client = client,
+                  calendar = None,
+                  CSVoutputPath: str = '') -> pd.DataFrame:
 
+    if calendar is None:
+        calendar = getWeeklyEarningsCalendar(_apiClient = _apiClient)
+        sleep(API_CALL_LIMIT + 1)
+
+    if CSVoutputPath == '':
+        CSVoutputPath = f'picks{date.today().strftime("%Y%m%d%H%M%S")}.csv'
+
+    rows = []
+    for CalendarRow in calendar.itertuples():
+        EarningsDate = CalendarRow[1]
+        symbol = CalendarRow[8]
+        ratings = computeConfidenceRating(_apiClient = _apiClient, symbol = symbol)
+        meanRating = ratings[0]
+        congruency = ratings[1]
+        ratingsDate = ratings[2]
+
+
+        currentRow = [
+            EarningsDate,
+            symbol,
+            meanRating,
+            congruency,
+            ratingsDate
+        ]
+        rows.append(currentRow)
+        sleep(API_CALL_LIMIT)
+
+    if CSVoutputPath != '':
+        pd.DataFrame(rows).to_csv(CSVoutputPath, index=False)
+
+    return pd.DataFrame(rows)
 
 if __name__ == "__main__":
     main()

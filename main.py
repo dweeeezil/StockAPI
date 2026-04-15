@@ -11,9 +11,10 @@ def main():
         api_key = f.read()
     finnhub_client = finnhub.Client(api_key = api_key)
 
-    #print(getCalendar(client = finnhub_client, outputCSV = True))
 
-    #earningsCalendar = getCalendar(client=finnhub_client,exportCSV=True)
+
+
+
 
     parseCalendar(finnhub_client,
                   readFromCSV = True,
@@ -22,7 +23,6 @@ def main():
                   logging = True)
 
     #print(confidenceRating(finnhub_client, symbol = 'CANN'))
-
 
 
 
@@ -54,17 +54,19 @@ def parseCalendar(client: finnhub.Client,
         #symbol = CalendarEntry[7]
         #year = CalendarEntry[8]
 
-        ratings = confidenceRating(client, symbol = CalendarEntry[7])
+        ratings = confidenceRating(client, symbol = CalendarEntry[8])
 
         currentrow = {
             'Release Date': CalendarEntry[0],
             'RevenueActual': CalendarEntry[5],
             'RevenueEstimate': CalendarEntry[6],
-            'symbol': CalendarEntry[7],
+            'symbol': CalendarEntry[8],
             'Confidence': ratings['Confidence'],
             'LastUpdated': ratings['Period'],
             'Congruency': ratings['Congruency'],
         }
+
+
         exportRows.append(currentrow)
 
         if logging:
@@ -75,13 +77,13 @@ def parseCalendar(client: finnhub.Client,
 
         #------------------------------------ END OF LOOP ---------------
 
+    exportRows = pd.DataFrame(exportRows)
+    exportRows.sort_values(by='Confidence', ascending=False, inplace=True)
 
     if exportCSV:
-        pd.DataFrame(exportRows).to_csv(exportPath, index=False)
-
-    return pd.DataFrame(exportRows)
-
-
+        exportRows.to_csv(exportPath, index=False)
+    print('Done!')
+    return exportRows
 
 
 def getCalendar(client: finnhub.Client,
@@ -99,8 +101,6 @@ def getCalendar(client: finnhub.Client,
 
     sleep(2) #api call limit timing
     return calendar
-
-
 
 def confidenceRating(client: finnhub.Client, symbol: str = 'AAPL') -> dict:
     ratings = client.recommendation_trends(symbol)
@@ -128,19 +128,23 @@ def confidenceRating(client: finnhub.Client, symbol: str = 'AAPL') -> dict:
         2: 2 * latest['strongBuy'] #still not great, need to improve
     }
 
+    max = sum([latest['strongSell'], latest['sell'], latest['hold'], latest['buy'], latest['strongBuy']])
+
     N = sum(weighted.values()) # this is wrong, N should be sum of values * their weights
     if N == 0:
         raise Exception('No data')
+
 
     mean = sum(score * count for score, count in weighted.items()) / N
     variance = sum(count * (score - mean)**2
                    for score, count in weighted.items()) / N
 
-    std_dev = sqrt(variance)
+    #std_dev = sqrt(variance)
 
 
-    confidence = float(round(mean, 2)) # wrong, need to figure how tf this returns values of >100%
-    congruency = round((1 - (std_dev / 2)), 2)
+    #confidence = float(round(mean, 2))
+    confidence = float(round((N / max), 2))
+    congruency = 0#round((1 - (std_dev / 2)), 2)
 
     data = {'Confidence': confidence,
             'Period' : period,    #how up to date ratings are
