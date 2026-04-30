@@ -18,7 +18,8 @@ def main():
         API_CLIENT = finnhub.Client(api_key = api_key)
         f.close()
 
-    computeConfidenceRating(_symbol='AAPL', logging=True)
+    generatePicks(API_CLIENT)
+
     return
 
 
@@ -46,15 +47,36 @@ def computeConfidenceRating(_symbol:str = '',
         _ratings = (_apiClient.recommendation_trends(_symbol))
         _ratings = pd.DataFrame(_ratings)
         _ratings.sort_values(by=['period'], ascending=False)
+        _ratings = _ratings.iloc[0]
     except:
         print(f'Ratings Period Key Error for {_symbol}')
         return [0, 0, '0000-00-00']
 
+    ratingsDate = _ratings['period']
+    weighted = (
+            [0] * _ratings.get('strongSell', 0) +
+            [25] * _ratings.get('sell', 0) +
+            [50] * _ratings.get('hold', 0) +
+            [75] * _ratings.get('buy', 0) +
+            [100] * _ratings.get('strongBuy', 0)
+    )
 
+    if weighted:
+        mean = round((sum(weighted) / len(weighted)), 2)
+        meanSquared = sum(x * x for x in weighted) / len(weighted)
+        variance = meanSquared - mean ** 2
+        std_dev = round(sqrt(variance), 3)
+        max_std = 50
+        congruency = round(max(0, (1 - (std_dev / max_std))), 4) * 100
+        congruency = round(congruency, 2)
+    else:
+        mean, congruency = 0, 0
 
     if logging:
-        print(_ratings)
-    return []
+        print(f'{_ratings} \n Mean:{mean} \n Congruency:{congruency} \n RatingsDate:{ratingsDate}')
+
+    return [mean, congruency, ratingsDate]
+
 
 
 # Gets earnings calendar, ratings, etc... Computes confidence and congruency, returns picks
@@ -68,6 +90,30 @@ def generatePicks(_apiClient:finnhub.Client = API_CLIENT,
     calendar = _apiClient.earnings_calendar(_from=_start, to=_end, symbol='', international=False)
     calendar = pd.DataFrame(calendar['earningsCalendar'])
     sleep(API_CALL_LIMIT)
+
+    rows = []
+    for CalendarRow in calendar.itertuples():
+        EarningsDate = CalendarRow[1]
+        symbol = CalendarRow[8]
+        ratings = computeConfidenceRating(_apiClient=_apiClient, _symbol=symbol, logging=True)
+        meanRating = ratings[0]
+        congruency = ratings[1]
+        ratingsDate = ratings[2]
+
+        currentRow = [
+            EarningsDate,
+            symbol,
+            meanRating,
+            congruency,
+            ratingsDate
+        ]
+        rows.append(currentRow)
+        sleep(API_CALL_LIMIT)
+
+
+    CSVoutputPath = f'picks{date.today().strftime("%Y%m%d%")}.csv'
+    pd.DataFrame(rows).to_csv(CSVoutputPath, index=False)
+    return pd.DataFrame(rows)
 
 
 
